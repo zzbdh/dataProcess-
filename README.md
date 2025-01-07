@@ -5,7 +5,7 @@
 2. 把main文件中的exlPath更换为指定excel的路径
 3. 执行main函数
 
-eg:
+example:
 成功添加
 ![img.png](img.png)
 
