@@ -5,7 +5,8 @@ import static org.example.Helper.*;
 public class Main {
     public static void main(String[] args) {
         try {
-            exlToSql("C:\\Users\\mike\\Desktop\\data2.xlsx");
+            String exlPath = "C:\\Users\\mike\\Desktop\\data2.xlsx";
+            exlToSql(exlPath);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

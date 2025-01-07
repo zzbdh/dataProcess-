@@ -3,95 +3,103 @@ package org.example;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.*;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.io.*;
 import java.sql.*;
 import java.util.*;
 public class Helper {
+    private static final Logger LOGGER = Logger.getLogger(Helper.class.getName());
     // MySQL数据库连接配置
     private static final String DB_URL = "jdbc:mysql://localhost:3306/datatest";
     private static final String USER = "root";
     private static final String PASS = "123456";
 
+
     /**
      * 把excel表格数据存到数据库中
      *
      * @param filePath 表格路径
-     * @throws Exception
      */
-    public static void exlToSql(String filePath) throws Exception {
+    public static void exlToSql(String filePath) {
 
-        FileInputStream fis = new FileInputStream(filePath);
-        Workbook workbook = new XSSFWorkbook(fis);
+        try{
+            FileInputStream fis = new FileInputStream(filePath);
+            Workbook workbook = new XSSFWorkbook(fis);
 
-        Sheet sheet = workbook.getSheetAt(0);  // 获取第一个工作表
-        Iterator<Row> rowIterator = sheet.iterator();
+            Sheet sheet = workbook.getSheetAt(0);  // 获取第一个工作表
+            Iterator<Row> rowIterator = sheet.iterator();
 
-        // 获取表头（第一行）
-        Row headerRow = sheet.getRow(0);
-        int colNum = headerRow.getPhysicalNumberOfCells();
-        List<String> headers = new ArrayList<>();
-        for (int i = 0; i < headerRow.getPhysicalNumberOfCells(); i++) {
-            headers.add(headerRow.getCell(i).getStringCellValue()); // 获取列名
-        }
+            // 获取表头（第一行）
+            Row headerRow = sheet.getRow(0);
+            // 列数
+            int colNum = headerRow.getPhysicalNumberOfCells();
 
-        Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
-        conn.setAutoCommit(false); // 开始事务
-
-        String insertSQL = "INSERT INTO datatable (名称, 车型, 所属产品, PCC分类, `describe`, pic) VALUES (?, ?, ?, ?, ?, ?)";
-        PreparedStatement stmt = conn.prepareStatement(insertSQL);
-
-        // 跳过第一行（表头），开始处理数据
-        rowIterator.next();
-
-        // 拿到所有图片的信息
-        Map<Integer, byte[]> m=extractImagesFromExcel(filePath);
-
-        while (rowIterator.hasNext()) {
-            Row row = rowIterator.next();
-
-            // 读取前四列
-            String col1 = getCellValue(row.getCell(0));
-            String col2 = getCellValue(row.getCell(1));
-            String col3 = getCellValue(row.getCell(2));
-            String col4 = getCellValue(row.getCell(3));
-
-            // 读取后续的描述列 k1-kN
-            StringBuilder description = new StringBuilder();
-            for (int i = 4; i < colNum - 1; i++) {
-                String k = headers.get(i);  // 获取列名
-                String v = getCellValue(row.getCell(i));  // 获取对应列的值
-
-                if (i > 4) description.append(", ");
-                description.append(k).append(":").append(v);
+            List<String> headers = new ArrayList<>();
+            for (int i = 0; i < headerRow.getPhysicalNumberOfCells(); i++) {
+                headers.add(headerRow.getCell(i).getStringCellValue()); // 获取列名
             }
 
+            Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
+            // 开始事务
+            conn.setAutoCommit(false);
 
-            // 插入数据到数据库
-            stmt.setString(1, col1);
-            stmt.setString(2, col2);
-            stmt.setString(3, col3);
-            stmt.setString(4, col4);
-            stmt.setString(5, description.toString());
-            stmt.setBytes(6,m.get(row.getRowNum()));
-            System.out.println("pic row num:"+row.getRowNum() );
+            String insertSQL = "INSERT INTO datatable (名称, 车型, 所属产品, PCC分类, `describe`, pic) VALUES (?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(insertSQL);
 
-            stmt.addBatch();
+            // 跳过第一行（表头），开始处理数据
+            rowIterator.next();
+
+            // 拿到所有图片的信息
+            Map<Integer, byte[]> m=extractImagesFromExcel(filePath);
+
+            while (rowIterator.hasNext()) {
+                Row row = rowIterator.next();
+
+                // 读取前四列
+                String col1 = getCellValue(row.getCell(0));
+                String col2 = getCellValue(row.getCell(1));
+                String col3 = getCellValue(row.getCell(2));
+                String col4 = getCellValue(row.getCell(3));
+
+                // 读取后续的列
+                StringBuilder description = new StringBuilder();
+                for (int i = 4; i < colNum - 1; i++) {
+                    String k = headers.get(i);  // 获取列名
+                    String v = getCellValue(row.getCell(i));  // 获取对应列的值
+
+                    if (i > 4) description.append(", ");
+                    description.append(k).append(":").append(v);
+                }
+
+                // 插入数据到数据库
+                stmt.setString(1, col1);
+                stmt.setString(2, col2);
+                stmt.setString(3, col3);
+                stmt.setString(4, col4);
+                stmt.setString(5, description.toString());
+                stmt.setBytes(6,m.get(row.getRowNum()));
+
+                stmt.addBatch();
+            }
+
+            stmt.executeBatch();
+            conn.commit();
+
+            stmt.close();
+            conn.close();
+            workbook.close();
+            fis.close();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error occurred", e);
         }
-
-        stmt.executeBatch(); // 执行批量插入
-        conn.commit(); // 提交事务
-
-        stmt.close();
-        conn.close();
-        workbook.close();
-        fis.close();
     }
 
     /**
      * 获取单元格的值
      *
      * @param cell 单元格
-     * @return
+     * @return 返回单元格的值
      */
     private static String getCellValue(Cell cell) {
         if (cell == null) {
@@ -152,8 +160,8 @@ public class Helper {
 
                     // 获取图片的锚点（确定图片所在的单元格位置）
                     ClientAnchor anchor = picture.getClientAnchor();
-                    int rowNum = anchor.getRow1();  // 图片所在的行号
-
+                    // 图片所在的行号
+                    int rowNum = anchor.getRow1();
                     // 存储图片数据到 Map
                     imageMap.put(rowNum, pictureData.getData());
                 }
@@ -166,8 +174,8 @@ public class Helper {
     /**
      * 从数据库中获取图片的二进制数据 测试使用
      *
-     * @param name
-     * @return
+     * @param name 根据名称查询
+     * @return 返回图片的二进制数据
      */
     public static byte[] getImageFromDatabase(String name) {
         byte[] imageBytes = null;
@@ -188,7 +196,7 @@ public class Helper {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "SQLError occurred", e);
         }
 
         return imageBytes;
@@ -204,7 +212,7 @@ public class Helper {
             fos.write(imageData);
             System.out.println("图片已保存为 output_image.png");
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "IOError occurred", e);
         }
     }
 
